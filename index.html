@@ -5515,59 +5515,73 @@ function getMachineId(){
   }
   return id;
 }
-function genKey(mid){
-  const secret = 'HUONG2026TCT';
-  const s = mid + secret;
+function licHash(s){
   let h = 5381;
   for(let i = 0; i < s.length; i++){ h = ((h << 5) + h + s.charCodeAt(i)) | 0; }
-  return 'KH-' + Math.abs(h).toString(36).toUpperCase().padStart(8, '0');
+  return Math.abs(h).toString(36).toUpperCase().padStart(8, '0');
+}
+/** Key khóa 1 máy / 1 năm: KH1-YYYYMMDD-XXXXXXXX */
+function genKey(mid, expYmd){
+  const secret = 'HUONG2026TCT';
+  const midU = String(mid || '').trim().toUpperCase();
+  if(expYmd){
+    const exp = String(expYmd).replace(/[^0-9]/g, '').slice(0, 8);
+    return 'KH1-' + exp + '-' + licHash(midU + '|' + exp + '|' + secret);
+  }
+  return 'KH-' + licHash(midU + secret);
+}
+function licParseKey(key, mid){
+  const k = String(key || '').trim().toUpperCase();
+  const midU = String(mid || '').trim().toUpperCase();
+  const m1 = k.match(/^KH1-(\d{8})-([A-Z0-9]{8})$/);
+  if(m1){
+    if(k !== genKey(midU, m1[1])) return {ok:false, why:'wrong'};
+    const exp = new Date(+m1[1].slice(0,4), +m1[1].slice(4,6)-1, +m1[1].slice(6,8));
+    const today = new Date(); today.setHours(0,0,0,0);
+    if(today > exp) return {ok:false, why:'expired', exp: m1[1]};
+    return {ok:true, exp: m1[1], left: Math.ceil((exp - today)/86400000)};
+  }
+  if(k === genKey(midU)) return {ok:true, exp: null, left: 9999};
+  return {ok:false, why:'wrong'};
+}
+function rrShowUnlock(mid, title, errText){
+  document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#f5f5f5"><div style="text-align:center;padding:40px;background:#fff;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.1);max-width:420px"><div style="font-size:3rem;margin-bottom:12px">⏰</div><h2 style="color:#d32f2f;margin:0 0 12px">${title}</h2><p style="color:#555;margin:0 0 16px">${errText}</p><div style="background:#f9f9f9;border-radius:10px;padding:16px;margin:16px 0;text-align:left"><p style="margin:0 0 6px;font-size:.85rem;color:#888">Mã máy của bạn:</p><p style="margin:0;font-family:monospace;font-size:1.2rem;font-weight:700;color:#1a237e;letter-spacing:1px;user-select:all">${mid}</p></div><div style="margin:12px 0"><input id="keyInput" type="text" placeholder="Nhập mã kích hoạt (1 máy / 1 năm)..." style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-size:1rem;box-sizing:border-box;text-align:center;letter-spacing:1px"><button id="keyBtn" style="margin-top:8px;width:100%;padding:10px;background:#d32f2f;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer">Kích hoạt</button><p id="keyErr" style="color:#d32f2f;font-size:.85rem;margin:6px 0 0;display:none">Mã kích hoạt không đúng hoặc không khớp máy này!</p></div><hr style="border:none;border-top:1px solid #eee;margin:16px 0"><p style="margin:0 0 4px"><b>Cần sử dụng tiếp?</b></p><p style="margin:4px 0"><a href="https://zalo.me/0328878297" style="color:#d32f2f;font-size:1.2rem;font-weight:700;text-decoration:none">💬 Liên hệ Zalo 0328.878.297</a></p><p style="color:#888;font-size:.85rem;margin-top:4px">Gửi mã máy để nhận mã kích hoạt khóa 1 máy / 1 năm.</p></div></div>`;
+  document.getElementById('keyBtn').addEventListener('click', () => {
+    const inp = document.getElementById('keyInput').value.trim().toUpperCase();
+    const v = licParseKey(inp, mid);
+    if(v.ok){ localStorage.setItem('smarttax_key', inp); location.reload(); }
+    else {
+      document.getElementById('keyErr').style.display = 'block';
+      document.getElementById('keyErr').textContent = v.why === 'expired' ? 'Mã đã hết hạn sử dụng 1 năm.' : 'Mã kích hoạt không đúng hoặc không khớp máy này!';
+    }
+  });
+  document.getElementById('keyInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('keyBtn').click(); });
 }
 function checkTrial(){
   const mid = getMachineId();
   const savedKey = localStorage.getItem('smarttax_key');
-  if(savedKey && savedKey === genKey(mid)) return true;
+  if(savedKey){
+    const v = licParseKey(savedKey, mid);
+    if(v.ok) return true;
+    localStorage.removeItem('smarttax_key');
+    if(v.why === 'expired'){
+      rrShowUnlock(mid, 'Hết hạn 1 năm', 'Mã kích hoạt gắn máy này đã hết hạn 1 năm sử dụng. Gửi mã máy để gia hạn.');
+      return false;
+    }
+  }
   const KEY = 'smarttax_trial_start';
   let start = localStorage.getItem(KEY);
   if(!start){ start = Date.now(); localStorage.setItem(KEY, start); }
   const days = Math.floor((Date.now() - Number(start)) / 86400000);
   const left = 30 - days;
   if(left <= 0){
-    document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#f5f5f5"><div style="text-align:center;padding:40px;background:#fff;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.1);max-width:420px"><div style="font-size:3rem;margin-bottom:12px">⏰</div><h2 style="color:#d32f2f;margin:0 0 12px">Hết hạn dùng thử</h2><p style="color:#555;margin:0 0 16px">Phần mềm VANBANNGANHTHUE đã hết hạn dùng thử 30 ngày.</p><div style="background:#f9f9f9;border-radius:10px;padding:16px;margin:16px 0;text-align:left"><p style="margin:0 0 6px;font-size:.85rem;color:#888">Mã máy của bạn:</p><p style="margin:0;font-family:monospace;font-size:1.2rem;font-weight:700;color:#1a237e;letter-spacing:1px;user-select:all">${mid}</p></div><div style="margin:12px 0"><input id="keyInput" type="text" placeholder="Nhập mã kích hoạt..." style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-size:1rem;box-sizing:border-box;text-align:center;letter-spacing:1px"><button id="keyBtn" style="margin-top:8px;width:100%;padding:10px;background:#d32f2f;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer">Kích hoạt</button><p id="keyErr" style="color:#d32f2f;font-size:.85rem;margin:6px 0 0;display:none">Mã kích hoạt không đúng!</p></div><hr style="border:none;border-top:1px solid #eee;margin:16px 0"><p style="margin:0 0 4px"><b>Cần sử dụng tiếp?</b></p><p style="margin:4px 0"><a href="https://zalo.me/0328878297" style="color:#d32f2f;font-size:1.2rem;font-weight:700;text-decoration:none">💬 Liên hệ Zalo 0328.878.297</a></p><p style="color:#888;font-size:.85rem;margin-top:4px">Gửi mã máy để nhận mã kích hoạt.</p></div></div>`;
-    document.getElementById('keyBtn').addEventListener('click', () => {
-      const inp = document.getElementById('keyInput').value.trim().toUpperCase();
-      if(inp === genKey(mid)){ localStorage.setItem('smarttax_key', inp); location.reload(); }
-      else { document.getElementById('keyErr').style.display = 'block'; }
-    });
-    document.getElementById('keyInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('keyBtn').click(); });
+    rrShowUnlock(mid, 'Hết hạn dùng thử', 'Phần mềm VANBANNGANHTHUE đã hết hạn dùng thử 30 ngày.');
     return false;
   }
-  setTimeout(() => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.style.cssText = 'display:none';
-    chip.addEventListener('click', () => {
-      const box = document.createElement('div');
-      box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:10000;padding:16px';
-      box.innerHTML = '<div style="background:#fff;border-radius:14px;padding:26px;max-width:380px;width:100%;text-align:center;font-family:Arial,sans-serif"><h3 style="margin:0 0 10px;color:#1a237e">Bản dùng thử — còn ' + left + ' ngày</h3><p style="margin:0 0 6px;font-size:.85rem;color:#888">Mã máy của bạn:</p><p style="margin:0 0 4px;font-family:monospace;font-size:1.3rem;font-weight:700;color:#1a237e;letter-spacing:1px;user-select:all">' + mid + '</p><button id="midCopy" style="margin:8px 0 14px;padding:7px 16px;background:#eee;border:none;border-radius:8px;font-size:.85rem;cursor:pointer">📋 Sao chép mã máy</button><div style="margin:10px 0"><input id="keyInput2" type="text" placeholder="Nhập mã kích hoạt..." style="width:100%;padding:10px;border:2px solid #ddd;border-radius:8px;font-size:1rem;box-sizing:border-box;text-align:center;letter-spacing:1px"><button id="keyBtn2" style="margin-top:8px;width:100%;padding:10px;background:#d32f2f;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer">Kích hoạt ngay</button><p id="keyErr2" style="color:#d32f2f;font-size:.85rem;margin:6px 0 0;display:none">Mã kích hoạt không đúng!</p></div><hr style="border:none;border-top:1px solid #eee;margin:14px 0"><p style="margin:0;font-size:.9rem">Cần sử dụng tiếp? Liên hệ Zalo 0328.878.297</p><p style="margin:4px 0 14px;font-size:.85rem;color:#888">Gửi mã máy để nhận mã kích hoạt.</p><button id="midClose" style="padding:8px 20px;background:#1a237e;color:#fff;border:none;border-radius:8px;cursor:pointer">Đóng</button></div>';
-      document.body.appendChild(box);
-      box.querySelector('#midCopy').addEventListener('click', () => {
-        if(navigator.clipboard) navigator.clipboard.writeText(mid);
-        box.querySelector('#midCopy').textContent = '✅ Đã sao chép';
-      });
-      box.querySelector('#keyBtn2').addEventListener('click', () => {
-        const inp = box.querySelector('#keyInput2').value.trim().toUpperCase();
-        if(inp === genKey(mid)){ localStorage.setItem('smarttax_key', inp); location.reload(); }
-        else box.querySelector('#keyErr2').style.display = 'block';
-      });
-      box.querySelector('#keyInput2').addEventListener('keydown', e => { if(e.key === 'Enter') box.querySelector('#keyBtn2').click(); });
-      box.querySelector('#midClose').addEventListener('click', () => box.remove());
-      box.addEventListener('click', e => { if(e.target === box) box.remove(); });
-    });
-    document.body.appendChild(chip);
-  }, 500);
   return true;
 }
 document.addEventListener('DOMContentLoaded', () => { if(checkTrial()) init(); });
+
 
 </script>
 </body>
