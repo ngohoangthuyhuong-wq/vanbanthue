@@ -5557,12 +5557,29 @@ function rrShowUnlock(mid, title, errText){
   });
   document.getElementById('keyInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('keyBtn').click(); });
 }
+function rrShowMidChip(mid, note){
+  if(document.getElementById('rrMidChip')) return;
+  const chip = document.createElement('div');
+  chip.id = 'rrMidChip';
+  chip.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:9998;background:#1a237e;color:#fff;border-radius:12px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:min(92vw,320px);font-family:Be Vietnam Pro,Arial,sans-serif';
+  chip.innerHTML = '<div style="font-size:.75rem;opacity:.85;margin-bottom:4px">' + (note || 'Mã máy') + '</div><div style="font-family:Consolas,monospace;font-weight:700;letter-spacing:1px;user-select:all;font-size:1rem;margin-bottom:8px">' + mid + '</div><button type="button" id="rrMidCopy" style="width:100%;padding:8px;border:0;border-radius:8px;background:#fff;color:#1a237e;font-weight:700;cursor:pointer">Sao chép mã máy</button>';
+  document.body.appendChild(chip);
+  chip.querySelector('#rrMidCopy').addEventListener('click', () => {
+    const btn = chip.querySelector('#rrMidCopy');
+    const done = () => { btn.textContent = 'Đã sao chép'; setTimeout(() => { btn.textContent = 'Sao chép mã máy'; }, 1500); };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(mid).then(done).catch(() => { prompt('Copy mã máy:', mid); done(); });
+    else { prompt('Copy mã máy:', mid); done(); }
+  });
+}
 function checkTrial(){
   const mid = getMachineId();
   const savedKey = localStorage.getItem('smarttax_key');
   if(savedKey){
     const v = licParseKey(savedKey, mid);
-    if(v.ok) return true;
+    if(v.ok){
+      setTimeout(() => rrShowMidChip(mid, 'Đã kích hoạt — mã máy'), 400);
+      return true;
+    }
     localStorage.removeItem('smarttax_key');
     if(v.why === 'expired'){
       rrShowUnlock(mid, 'Hết hạn 1 năm', 'Mã kích hoạt gắn máy này đã hết hạn 1 năm sử dụng. Gửi mã máy để gia hạn.');
@@ -5578,21 +5595,7 @@ function checkTrial(){
     rrShowUnlock(mid, 'Hết hạn dùng thử', 'Phần mềm VANBANNGANHTHUE đã hết hạn dùng thử 30 ngày.');
     return false;
   }
-  // Bản dùng thử: mở lên hiện mã máy để gửi cấp key
-  setTimeout(() => {
-    if(document.getElementById('rrMidChip')) return;
-    const chip = document.createElement('div');
-    chip.id = 'rrMidChip';
-    chip.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:9998;background:#1a237e;color:#fff;border-radius:12px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:min(92vw,320px);font-family:Be Vietnam Pro,Arial,sans-serif';
-    chip.innerHTML = '<div style="font-size:.75rem;opacity:.85;margin-bottom:4px">Bản dùng thử — còn ' + left + ' ngày</div><div style="font-size:.78rem;margin-bottom:4px">Mã máy (gửi để nhận mã 1 năm):</div><div style="font-family:Consolas,monospace;font-weight:700;letter-spacing:1px;user-select:all;font-size:1rem;margin-bottom:8px">' + mid + '</div><button type="button" id="rrMidCopy" style="width:100%;padding:8px;border:0;border-radius:8px;background:#fff;color:#1a237e;font-weight:700;cursor:pointer">📋 Sao chép mã máy</button>';
-    document.body.appendChild(chip);
-    chip.querySelector('#rrMidCopy').addEventListener('click', () => {
-      const btn = chip.querySelector('#rrMidCopy');
-      const done = () => { btn.textContent = '✅ Đã sao chép'; setTimeout(() => { btn.textContent = '📋 Sao chép mã máy'; }, 1500); };
-      if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(mid).then(done).catch(() => { prompt('Copy mã máy:', mid); done(); });
-      else { prompt('Copy mã máy:', mid); done(); }
-    });
-  }, 400);
+  setTimeout(() => rrShowMidChip(mid, 'Bản dùng thử — còn ' + left + ' ngày · mã máy'), 400);
   return true;
 }
 document.addEventListener('DOMContentLoaded', () => { if(checkTrial()) init(); });
