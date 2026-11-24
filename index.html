@@ -5557,12 +5557,17 @@ function rrShowUnlock(mid, title, errText){
   });
   document.getElementById('keyInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('keyBtn').click(); });
 }
-function rrShowMidChip(mid, note){
+function rrShowMidChip(mid, note, opts){
   if(document.getElementById('rrMidChip')) return;
+  const allowKey = !!(opts && opts.allowKey);
   const chip = document.createElement('div');
   chip.id = 'rrMidChip';
   chip.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:9998;background:#1a237e;color:#fff;border-radius:12px;padding:10px 12px;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:min(92vw,320px);font-family:Be Vietnam Pro,Arial,sans-serif';
-  chip.innerHTML = '<div style="font-size:.75rem;opacity:.85;margin-bottom:4px">' + (note || 'Mã máy') + '</div><div style="font-family:Consolas,monospace;font-weight:700;letter-spacing:1px;user-select:all;font-size:1rem;margin-bottom:8px">' + mid + '</div><button type="button" id="rrMidCopy" style="width:100%;padding:8px;border:0;border-radius:8px;background:#fff;color:#1a237e;font-weight:700;cursor:pointer">Sao chép mã máy</button>';
+  let html = '<div style="font-size:.75rem;opacity:.85;margin-bottom:4px">' + (note || 'Mã máy') + '</div><div style="font-family:Consolas,monospace;font-weight:700;letter-spacing:1px;user-select:all;font-size:1rem;margin-bottom:8px">' + mid + '</div><button type="button" id="rrMidCopy" style="width:100%;padding:8px;border:0;border-radius:8px;background:#fff;color:#1a237e;font-weight:700;cursor:pointer">Sao chép mã máy</button>';
+  if(allowKey){
+    html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.25)"><input id="rrMidKey" type="text" placeholder="Dán mã kích hoạt KH1-…" style="width:100%;padding:8px;border:0;border-radius:8px;font-size:.85rem;box-sizing:border-box;text-align:center;letter-spacing:.5px;margin-bottom:6px"><button type="button" id="rrMidAct" style="width:100%;padding:8px;border:0;border-radius:8px;background:#ffc107;color:#1a237e;font-weight:700;cursor:pointer">Kích hoạt</button><p id="rrMidErr" style="display:none;margin:6px 0 0;font-size:.75rem;color:#ffcdd2;text-align:center"></p></div>';
+  }
+  chip.innerHTML = html;
   document.body.appendChild(chip);
   chip.querySelector('#rrMidCopy').addEventListener('click', () => {
     const btn = chip.querySelector('#rrMidCopy');
@@ -5570,6 +5575,18 @@ function rrShowMidChip(mid, note){
     if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(mid).then(done).catch(() => { prompt('Copy mã máy:', mid); done(); });
     else { prompt('Copy mã máy:', mid); done(); }
   });
+  if(allowKey){
+    const act = () => {
+      const inp = chip.querySelector('#rrMidKey').value.trim().toUpperCase();
+      const err = chip.querySelector('#rrMidErr');
+      const v = licParseKey(inp, mid);
+      if(v.ok){ localStorage.setItem('smarttax_key', inp); location.reload(); return; }
+      err.style.display = 'block';
+      err.textContent = v.why === 'expired' ? 'Mã đã hết hạn.' : 'Mã không đúng hoặc không khớp máy này.';
+    };
+    chip.querySelector('#rrMidAct').addEventListener('click', act);
+    chip.querySelector('#rrMidKey').addEventListener('keydown', e => { if(e.key === 'Enter') act(); });
+  }
 }
 function checkTrial(){
   const mid = getMachineId();
@@ -5595,7 +5612,7 @@ function checkTrial(){
     rrShowUnlock(mid, 'Hết hạn dùng thử', 'Phần mềm VANBANNGANHTHUE đã hết hạn dùng thử 30 ngày.');
     return false;
   }
-  setTimeout(() => rrShowMidChip(mid, 'Bản dùng thử — còn ' + left + ' ngày · mã máy'), 400);
+  setTimeout(() => rrShowMidChip(mid, 'Bản dùng thử — còn ' + left + ' ngày · mã máy', {allowKey:true}), 400);
   return true;
 }
 document.addEventListener('DOMContentLoaded', () => { if(checkTrial()) init(); });
